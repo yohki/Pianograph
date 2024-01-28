@@ -12,7 +12,7 @@ import GameplayKit
 
 class GameViewController: UIViewController {
 
-    private let midi = MIDIManager()
+    private var midi: MIDIManager?
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -23,9 +23,10 @@ class GameViewController: UIViewController {
                 // Set the scale mode to scale to fit the window
                 scene.scaleMode = .aspectFill
                 
-                if 0 < midi.numberOfSources {
-                    midi.connectMIDIClient(0)
-                    midi.delegate = scene
+                midi = MIDIManager()
+                if 0 < midi!.numberOfSources {
+                    midi!.connectMIDIClient(0)
+                    midi!.delegate = scene
                 }
                 
                 // Present the scene

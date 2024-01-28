@@ -11,8 +11,8 @@ import CoreMIDI
 import os.log
 
 protocol MIDIManagerDelegate {
-    func messageReceived()
-    func statusChanged()
+    func noteOn(ch: UInt8, note: UInt8, vel: UInt8)
+    func noteOff(ch: UInt8, note: UInt8, vel: UInt8)
 }
 
 class MIDIManager {
@@ -30,12 +30,12 @@ class MIDIManager {
         numberOfSources = MIDIGetNumberOfSources()
         os_log("%i Device(s) found", numberOfSources)
         
-        for i in 0...numberOfSources {
+        for i in 0 ..< numberOfSources {
             let src = MIDIGetSource(i)
-            var strPtr: Unmanaged<CFString>?
-            let err = MIDIObjectGetStringProperty(src, kMIDIPropertyName, &strPtr)
+            var cfStr: Unmanaged<CFString>?
+            let err = MIDIObjectGetStringProperty(src, kMIDIPropertyName, &cfStr)
             if err == noErr {
-                if let str = strPtr?.takeRetainedValue() as String? {
+                if let str = cfStr?.takeRetainedValue() as String? {
                     sourceName.append(str)
                     os_log("Device #%i: %s", i, str)
                 }
@@ -78,19 +78,38 @@ class MIDIManager {
     
     func onMIDIStatusChanged(message: UnsafePointer<MIDINotification>) {
         os_log("MIDI Status changed!")
-        DispatchQueue.main.async {
-            self.delegate?.statusChanged()
-        }
     }
 
     func onMIDIMessageReceived(message: UnsafePointer<MIDIPacketList>, srcConnRefCon: UnsafeMutableRawPointer?) {
-        os_log("MIDI Message Received!")
-        DispatchQueue.main.async {
-            self.delegate?.messageReceived()
+
+        let packetList: MIDIPacketList = message.pointee
+        let n = packetList.numPackets
+        //os_log("%i MIDI Message(s) Received", n)
+        
+        var packet = packetList.packet
+        for _ in 0 ..< n {
+            // Handle MIDIPacket
+            let mes: UInt8 = packet.data.0 & 0xF0
+            let ch: UInt8 = packet.data.0 & 0x0F
+            if mes == 0x90 && packet.data.2 != 0 {
+                // Note On
+                os_log("Note ON")
+                let noteNo = packet.data.1
+                let velocity = packet.data.2
+                DispatchQueue.main.async {
+                    self.delegate?.noteOn(ch: ch, note: noteNo, vel: velocity)
+                }
+            } else if (mes == 0x80 || mes == 0x90) {
+                // Note Off
+                os_log("Note OFF")
+                let noteNo = packet.data.1
+                let velocity = packet.data.2
+                DispatchQueue.main.async {
+                    self.delegate?.noteOff(ch: ch, note: noteNo, vel: velocity)
+                }
+            }
+            let packetPtr = MIDIPacketNext(&packet)
+            packet = packetPtr.pointee
         }
-    }
-    
-    static func onMIDIReceived() {
-        print("Packet Received (Static Func)")
     }
 }
